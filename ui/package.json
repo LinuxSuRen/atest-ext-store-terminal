@@ -1,0 +1,31 @@
+{
+  "name": "atest-ext-store-database",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "build-only": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/lang-sql": "github:codemirror/lang-sql",
+    "@xterm/xterm": "^5.5.0",
+    "codemirror": "^5.65.17",
+    "codemirror-json-schema": "^0.8.1",
+    "element-plus": "^2.10.4",
+    "sql-formatter": "^15.6.10",
+    "vue": "^3.5.17",
+    "vue-codemirror": "^5.1.0",
+    "vue-i18n": "^11.1.9"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.0",
+    "@vue/tsconfig": "^0.7.0",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4",
+    "vue-tsc": "^2.2.12"
+  }
+}
