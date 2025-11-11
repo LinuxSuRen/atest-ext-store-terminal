@@ -23,6 +23,7 @@ const addTerminal = () => {
   
   const newTerminal = new Terminal({
     cursorBlink: true,
+    scrollback: 1000,
     theme: {
       background: '#000000',
       foreground: '#ffffff'
@@ -93,6 +94,36 @@ const addTerminal = () => {
   })
 }
 
+function calcCols(term: Terminal, ele: HTMLElement) {
+  const core = term._core;
+  const charWidth = core._renderService.dimensions.device.char.width;
+  const padding = 20;
+  const availableWidth = ele.clientWidth - padding;
+  return Math.max(1, Math.trunc(availableWidth / charWidth));
+}
+
+const calcRows = (term: Terminal, ele: HTMLElement) => {
+  const core = term._core;
+  const charHeight = core._renderService.dimensions.device.char.height;
+  const padding = 20;
+  const availableHeight = ele?.parentElement.clientHeight - padding;
+  return Math.max(1, Math.trunc(availableHeight / charHeight));
+ }
+
+function reflow() {
+  terminals.value.forEach(terminalInstance => {
+    const terminal = terminalInstance.terminal
+    const cols = calcCols(terminal, document.getElementById(terminalInstance.id)!);
+    const rows = calcRows(terminal, document.getElementById(terminalInstance.id)!);
+    if (Number.isNaN(cols) || Number.isNaN(rows)) return
+    terminal.resize(cols, rows)
+  })
+}
+
+// 初始化 & 监听
+reflow();
+window.addEventListener('resize', reflow);
+
 const sendInputToProcess = async (pid: number, input: string) => {
   try {
     const response = await fetch('/api/exec/input', {
@@ -112,6 +143,8 @@ const sendInputToProcess = async (pid: number, input: string) => {
 }
 
 const executeCommand = async (terminalId: string, cmd: string) => {
+  if (cmd === '') return
+
   const terminalInstance = terminals.value.find(t => t.id === terminalId)
   if (!terminalInstance) return
 
@@ -127,7 +160,7 @@ const executeCommand = async (terminalId: string, cmd: string) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        cmd: cmd.trim(),
+        cmd: cmd,
         terminalId: terminalId,
       })
     });
@@ -160,7 +193,6 @@ const executeCommand = async (terminalId: string, cmd: string) => {
             const data = JSON.parse(line.substring(6));
             switch (data.type) {
               case 'start':
-                terminal.writeln(`[Process started with PID: ${data.pid}]`);
                 terminalInstance.currentPid = data.pid;
                 break;
               case 'stdout':
@@ -170,7 +202,6 @@ const executeCommand = async (terminalId: string, cmd: string) => {
                 terminal.write(data.data + '\r\n');
                 break;
               case 'end':
-                terminal.writeln(`[Process exited with code ${data.exitCode}]`);
                 terminal.write('$ ');
                 terminalInstance.isExecuting = false;
                 terminalInstance.currentPid = null;
@@ -253,6 +284,13 @@ onUnmounted(() => {
     term.terminal.dispose()
   })
 })
+
+window.onresize = () => {
+  console.log('Window resized', window.innerWidth, terminals.value[0].terminal.cols, terminals.value[0].terminal.rows)
+  terminals.value.forEach((term: TerminalInstance) => {
+    term.terminal.resize(term.terminal.cols, term.terminal.rows)
+  })
+}
 </script>
 
 <template>
@@ -295,18 +333,16 @@ onUnmounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   margin-top: 10px;
 }
 
 .terminal-tabs :deep(.el-tabs__content) {
   flex: 1;
-  overflow: hidden;
 }
 
 .terminal-wrapper {
   width: 100%;
-  height: 100%;
+  height: calc(100vh - 150px);
   position: relative;
 }
 
