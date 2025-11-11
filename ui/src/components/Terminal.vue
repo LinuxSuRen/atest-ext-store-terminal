@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import type { TabsPaneContext } from 'element-plus'
@@ -14,6 +13,10 @@ interface TerminalInstance {
 const terminals = ref<TerminalInstance[]>([])
 const activeTerminal = ref('')
 
+interface CommandOutput {
+  stdout: string
+  stderr: string
+}
 let terminalCounter = 1
 
 const addTerminal = () => {
@@ -25,6 +28,33 @@ const addTerminal = () => {
     theme: {
       background: '#000000',
       foreground: '#ffffff'
+    }
+  })
+
+  let commandBuffer = ''
+  newTerminal.onData(data => {
+    if (data.charCodeAt(0) === 13) { // Enter key
+      newTerminal.write('\r\n')
+      fetch('/api/exec', {
+        method: 'POST',
+        body: JSON.stringify({
+          id,
+          cmd: commandBuffer.trim()
+        })
+      }).then(response => response.json())
+        .then((output: CommandOutput) => {
+          newTerminal.write(output?.stdout.replace(/\n/g, '\r\n') || '')
+          newTerminal.write('$ ')
+          commandBuffer = ''
+        })
+    } else if (data === '\x08' || data === '\x7F') { // delete key
+      if (commandBuffer.length > 0) {
+        commandBuffer = commandBuffer.slice(0, -1)
+        newTerminal.write('\b \b')
+      }
+    } else {
+      newTerminal.write(data)
+      commandBuffer += data
     }
   })
   
@@ -49,7 +79,7 @@ const addTerminal = () => {
 }
 
 const removeTerminal = (id: string) => {
-  const index = terminals.value.findIndex(term => term.id === id)
+  const index = terminals.value.findIndex((term: TerminalInstance) => term.id === id)
   if (index !== -1) {
     // Dispose of the terminal
     terminals.value[index].terminal.dispose()
@@ -79,7 +109,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   // Dispose of all terminals
-  terminals.value.forEach(term => {
+  terminals.value.forEach((term: TerminalInstance) => {
     term.terminal.dispose()
   })
 })

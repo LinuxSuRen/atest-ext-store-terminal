@@ -30,7 +30,7 @@ export default defineConfig(({mode}) => {
       lib: {
         entry: ('src/main.ts'),
       name: 'ATestPlugin',
-      fileName: (format) => `atest-ext-store-database.${format}.js`
+      fileName: (format) => `atest-ext-store-terminal.${format}.js`
     },
     rollupOptions: {
       // external: ['vue'],

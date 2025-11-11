@@ -40,6 +40,10 @@ func (o *option) runE(c *cobra.Command, args []string) (err error) {
 		}
 	}()
 
+	go func() {
+		pkg.StartExecServer(":8080")
+	}()
+
 	err = ext.CreateRunner(o.Extension, c, pkg.NewRemoteServer())
 	return
 }

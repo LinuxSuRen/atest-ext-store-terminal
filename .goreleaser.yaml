@@ -8,8 +8,8 @@ before:
 builds:
   - env:
       - CGO_ENABLED=0
-    id: atest-store-database
-    binary: atest-store-database
+    id: atest-store-terminal
+    binary: atest-store-terminal
     goos:
       - linux
       - windows
@@ -23,7 +23,7 @@ builds:
 archives:
   - name_template: "{{ .Binary }}-{{ .Os }}-{{ .Arch }}"
     builds:
-      - atest-store-database
+      - atest-store-terminal
     format_overrides:
       - goos: windows
         format: zip

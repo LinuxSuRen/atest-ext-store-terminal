@@ -63,8 +63,8 @@ jobs:
         run: |
           export TAG=${{ steps.vars.outputs.tag }}
           cd dist
-          oras push ${{ env.REGISTRY_DOCKERHUB }}/linuxsuren/atest-ext-store-database:${TAG#v} */*
-          oras push ${{ env.REGISTRY }}/linuxsuren/atest-ext-store-database:${TAG#v} */*
+          oras push ${{ env.REGISTRY_DOCKERHUB }}/linuxsuren/atest-ext-store-terminal:${TAG#v} */*
+          oras push ${{ env.REGISTRY }}/linuxsuren/atest-ext-store-terminal:${TAG#v} */*
 
   image:
     runs-on: ubuntu-22.04
