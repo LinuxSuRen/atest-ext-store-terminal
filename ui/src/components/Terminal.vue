@@ -15,6 +15,7 @@ interface TerminalInstance {
 
 const terminals = ref<TerminalInstance[]>([])
 const activeTerminal = ref('')
+const lastInput = ref('')
 let terminalCounter = 1
 
 const addTerminal = () => {
@@ -35,6 +36,7 @@ const addTerminal = () => {
     const terminalInstance = terminals.value.find(t => t.id === id)
     if (!terminalInstance) return
 
+    lastInput.value = data.charCodeAt(0) + ''
     if (data.charCodeAt(0) === 13) { // Enter key
       newTerminal.write('\r\n')
       if (terminalInstance.isExecuting && terminalInstance.currentPid) {
@@ -56,6 +58,9 @@ const addTerminal = () => {
     } else if (data === '\x03') {
       commandBuffer = ''
       newTerminal.write('\r\n')
+      newTerminal.write('$ ')
+    } else if (data.charCodeAt(0) === 12) {
+      newTerminal.write('\x1b[2J\x1b[H');
       newTerminal.write('$ ')
     } else {
       newTerminal.write(data)
@@ -90,6 +95,14 @@ const addTerminal = () => {
       newTerminal.writeln(`Welcome to ${name}!`)
       newTerminal.writeln('')
       newTerminal.write('$ ')
+
+      newTerminal.attachCustomKeyEventHandler((e) => {
+        if (e.type === 'keydown' && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+          e.preventDefault();
+          return false;
+        }
+        return true;
+      });
     }
   })
 }
@@ -316,6 +329,7 @@ window.onresize = () => {
         </div>
       </el-tab-pane>
     </el-tabs>
+    <div id="statusPanel" class="status-panel">{{lastInput}}</div>
   </div>
 </template>
 
