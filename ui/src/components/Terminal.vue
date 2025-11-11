@@ -8,15 +8,13 @@ interface TerminalInstance {
   id: string
   name: string
   terminal: Terminal
+  isExecuting: boolean
+  currentPid: number | null
+  commandBuffer: string
 }
 
 const terminals = ref<TerminalInstance[]>([])
 const activeTerminal = ref('')
-
-interface CommandOutput {
-  stdout: string
-  stderr: string
-}
 let terminalCounter = 1
 
 const addTerminal = () => {
@@ -32,21 +30,23 @@ const addTerminal = () => {
   })
 
   let commandBuffer = ''
-  newTerminal.onData(data => {
+  newTerminal.onData(async (data) => {
+    const terminalInstance = terminals.value.find(t => t.id === id)
+    if (!terminalInstance) return
+
     if (data.charCodeAt(0) === 13) { // Enter key
       newTerminal.write('\r\n')
-      fetch('/api/exec', {
-        method: 'POST',
-        body: JSON.stringify({
-          id,
-          cmd: commandBuffer.trim()
-        })
-      }).then(response => response.json())
-        .then((output: CommandOutput) => {
-          newTerminal.write(output?.stdout.replace(/\n/g, '\r\n') || '')
-          newTerminal.write('$ ')
-          commandBuffer = ''
-        })
+      if (terminalInstance.isExecuting && terminalInstance.currentPid) {
+        // If a command is executing, send input to the running process
+        // await sendInputToProcess(terminalInstance.currentPid, commandBuffer + '\n')
+        executeCommand(id, commandBuffer)
+      } else if (commandBuffer.trim()) {
+        // Otherwise, execute a new command
+        executeCommand(id, commandBuffer)
+      } else {
+        newTerminal.write('$ ')
+      }
+      commandBuffer = ''
     } else if (data === '\x08' || data === '\x7F') { // delete key
       if (commandBuffer.length > 0) {
         commandBuffer = commandBuffer.slice(0, -1)
@@ -55,13 +55,24 @@ const addTerminal = () => {
     } else {
       newTerminal.write(data)
       commandBuffer += data
+      
+      // If a command is executing, send input character to the running process
+      if (terminalInstance.isExecuting && terminalInstance.currentPid) {
+        await sendInputToProcess(terminalInstance.currentPid, data)
+      }
     }
+    
+    // Update the command buffer in the terminal instance
+    terminalInstance.commandBuffer = commandBuffer
   })
   
   terminals.value.push({
     id,
     name,
-    terminal: newTerminal
+    terminal: newTerminal,
+    isExecuting: false,
+    currentPid: null,
+    commandBuffer: ''
   })
   
   activeTerminal.value = id
@@ -76,6 +87,131 @@ const addTerminal = () => {
       newTerminal.write('$ ')
     }
   })
+}
+
+const sendInputToProcess = async (pid: number, input: string) => {
+  try {
+    const response = await fetch('/api/exec/input', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ pid, input })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+  } catch (error) {
+    console.error('Error sending input to process:', error);
+  }
+}
+
+const executeCommand = async (terminalId: string, cmd: string) => {
+  const terminalInstance = terminals.value.find(t => t.id === terminalId)
+  if (!terminalInstance) return
+
+  terminalInstance.isExecuting = true
+  terminalInstance.currentPid = null
+  const terminal = terminalInstance.terminal
+
+  try {
+    // Using fetch-based approach with streaming
+    const response = await fetch('/api/exec/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        cmd: cmd.trim(),
+        terminalId: terminalId,
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    if (!response.body) {
+      throw new Error('ReadableStream not supported');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    let buffer = '';
+    let processFinished = false;
+    
+    while (!processFinished) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // Keep the last incomplete line in the buffer
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.substring(6));
+            switch (data.type) {
+              case 'start':
+                terminal.writeln(`[Process started with PID: ${data.pid}]`);
+                terminalInstance.currentPid = data.pid;
+                break;
+              case 'stdout':
+                terminal.write(data.data + '\r\n');
+                break;
+              case 'stderr':
+                terminal.write(data.data + '\r\n');
+                break;
+              case 'end':
+                terminal.writeln(`[Process exited with code ${data.exitCode}]`);
+                terminal.write('$ ');
+                terminalInstance.isExecuting = false;
+                terminalInstance.currentPid = null;
+                processFinished = true;
+                break;
+              case 'error':
+                terminal.writeln(`[Error: ${data.data}]`);
+                terminal.write('$ ');
+                terminalInstance.isExecuting = false;
+                terminalInstance.currentPid = null;
+                processFinished = true;
+                break;
+            }
+          } catch (e) {
+            console.error('Error parsing SSE data:', e);
+          }
+        }
+      }
+    }
+
+    // Process any remaining data in the buffer
+    if (buffer.startsWith('data: ') && !processFinished) {
+      try {
+        const data = JSON.parse(buffer.substring(6));
+        if (data.type === 'end') {
+          terminal.writeln(`[Process exited with code ${data.exitCode}]`);
+          terminal.write('$ ');
+          terminalInstance.isExecuting = false;
+          terminalInstance.currentPid = null;
+        }
+      } catch (e) {
+        console.error('Error parsing SSE data:', e);
+      }
+    }
+    
+    // Ensure we always show the prompt when process finishes
+    if (processFinished) {
+      reader.cancel();
+    }
+  } catch (error) {
+    terminal.writeln(`[Error: ${error}]`);
+    terminal.write('$ ');
+    terminalInstance.isExecuting = false;
+    terminalInstance.currentPid = null;
+  }
 }
 
 const removeTerminal = (id: string) => {
