@@ -52,6 +52,10 @@ const addTerminal = () => {
         commandBuffer = commandBuffer.slice(0, -1)
         newTerminal.write('\b \b')
       }
+    } else if (data === '\x03') {
+      commandBuffer = ''
+      newTerminal.write('\r\n')
+      newTerminal.write('$ ')
     } else {
       newTerminal.write(data)
       commandBuffer += data
