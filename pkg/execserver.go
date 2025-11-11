@@ -105,7 +105,7 @@ func StartExecServer(addr string) {
 		_ = json.NewEncoder(w).Encode(resp)
 	})
 
-	cmdCache := map[string]io.Writer{}
+	cmdWriterCache := map[string]io.Writer{}
 
 	// Add streaming endpoint
 	mux.HandleFunc("/api/exec/stream", func(w http.ResponseWriter, r *http.Request) {
@@ -133,13 +133,13 @@ func StartExecServer(addr string) {
 			return
 		}
 
-		if c, ok := cmdCache[req.TerminalId]; ok {
+		if c, ok := cmdWriterCache[req.TerminalId]; ok {
 			fmt.Println("sending command to existing terminal", req.TerminalId, "cmd:", req.Cmd)
 			_, err := c.Write([]byte(req.Cmd + "\n"))
 			if err == nil {
 				return
 			}
-			cmdCache[req.TerminalId] = nil
+			cmdWriterCache[req.TerminalId] = nil
 		}
 
 		// Create context with timeout
@@ -162,7 +162,7 @@ func StartExecServer(addr string) {
 			http.Error(w, "failed to create stdin pipe: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		cmdCache[req.TerminalId] = stdinPipe
+		cmdWriterCache[req.TerminalId] = stdinPipe
 
 		// Create pipes for stdout and stderr
 		stdoutPipe, err := cmd.StdoutPipe()

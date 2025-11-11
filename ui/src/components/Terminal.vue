@@ -297,13 +297,6 @@ onUnmounted(() => {
     term.terminal.dispose()
   })
 })
-
-window.onresize = () => {
-  console.log('Window resized', window.innerWidth, terminals.value[0].terminal.cols, terminals.value[0].terminal.rows)
-  terminals.value.forEach((term: TerminalInstance) => {
-    term.terminal.resize(term.terminal.cols, term.terminal.rows)
-  })
-}
 </script>
 
 <template>
