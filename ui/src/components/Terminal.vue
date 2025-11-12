@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { Terminal } from '@xterm/xterm'
+import { ClipboardAddon } from '@xterm/addon-clipboard';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css'
 import type { TabsPaneContext } from 'element-plus'
 
@@ -30,6 +33,9 @@ const addTerminal = () => {
       foreground: '#ffffff'
     }
   })
+  newTerminal.loadAddon(new ClipboardAddon())
+  newTerminal.loadAddon(new WebLinksAddon());
+  newTerminal.loadAddon(new SearchAddon());
 
   let commandBuffer = ''
   newTerminal.onData(async (data) => {

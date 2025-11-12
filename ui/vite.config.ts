@@ -43,7 +43,7 @@ export default defineConfig(({mode}) => {
   },
   server: {
     proxy: {
-      '/api/exec/stream': {
+      '/extensionProxy/terminal': {
         target: env.VITE_API_URL,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/exec\/stream/, ''),
