@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -52,7 +53,7 @@ var processManager = &ProcessManager{
 
 // StartExecServer starts a small HTTP server to execute shell commands.
 // It runs in a goroutine and allows cross-origin requests (for local dev).
-func StartExecServer(addr string) {
+func StartExecServer(addr string) net.Listener {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/exec", func(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +109,7 @@ func StartExecServer(addr string) {
 	cmdWriterCache := map[string]io.Writer{}
 
 	// Add streaming endpoint
-	mux.HandleFunc("/api/exec/stream", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/extensionProxy/terminal", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
@@ -338,13 +339,17 @@ func StartExecServer(addr string) {
 		json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 	})
 
-	srv := &http.Server{Addr: addr, Handler: mux}
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
 
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := http.Serve(lis, mux); err != nil && err != http.ErrServerClosed {
 			log.Printf("exec server error: %v", err)
 		}
 	}()
+	return lis
 }
 
 // isInteractiveCommand checks if a command is likely to be interactive

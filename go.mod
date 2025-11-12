@@ -3,7 +3,7 @@ module github.com/linuxsuren/atest-ext-store-terminal
 go 1.24.3
 
 require (
-	github.com/linuxsuren/api-testing v0.0.21-0.20250810080538-f8547ca9e216
+	github.com/linuxsuren/api-testing v0.0.21-0.20251112023218-8ab2e3dfe704
 	github.com/spf13/cobra v1.9.1
 )
 
@@ -16,6 +16,9 @@ require (
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/bufbuild/protocompile v0.14.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/cucumber/gherkin-go/v19 v19.0.3 // indirect
+	github.com/cucumber/godog v0.12.6 // indirect
+	github.com/cucumber/messages-go/v16 v16.0.1 // indirect
 	github.com/evanphx/json-patch v0.5.2 // indirect
 	github.com/expr-lang/expr v1.15.6 // indirect
 	github.com/flopp/go-findfont v0.1.0 // indirect
@@ -26,17 +29,24 @@ require (
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/spec v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
+	github.com/gofrs/uuid v4.2.0+incompatible // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.19.0 // indirect
+	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
+	github.com/hashicorp/go-memdb v1.3.2 // indirect
+	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/huandu/xstrings v1.4.0 // indirect
+	github.com/iancoleman/orderedmap v0.3.0 // indirect
 	github.com/imdario/mergo v0.3.16 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/invopop/jsonschema v0.7.0 // indirect
 	github.com/jhump/protoreflect v1.15.3 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/k0kubun/go-ansi v0.0.0-20180517002512-3bf9e2903213 // indirect
 	github.com/linuxsuren/go-fake-runtime v0.0.5 // indirect
+	github.com/linuxsuren/go-service v0.0.0-20231225060426-efabcd3a5161 // indirect
 	github.com/linuxsuren/http-downloader v0.0.99 // indirect
 	github.com/linuxsuren/oauth-hub v0.0.1 // indirect
 	github.com/linuxsuren/unstructured v0.0.1 // indirect
@@ -60,10 +70,10 @@ require (
 	github.com/signintech/gopdf v0.33.0 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
-	github.com/swaggest/jsonschema-go v0.3.70 // indirect
-	github.com/swaggest/openapi-go v0.2.50 // indirect
-	github.com/swaggest/refl v1.3.0 // indirect
-	github.com/swaggest/rest v0.2.66 // indirect
+	github.com/swaggest/jsonschema-go v0.3.78 // indirect
+	github.com/swaggest/openapi-go v0.2.59 // indirect
+	github.com/swaggest/refl v1.4.0 // indirect
+	github.com/swaggest/rest v0.2.75 // indirect
 	github.com/swaggest/usecase v1.3.1 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
@@ -73,18 +83,18 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/crypto v0.38.0 // indirect
+	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/mod v0.26.0 // indirect
-	golang.org/x/net v0.40.0 // indirect
-	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.14.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
-	golang.org/x/term v0.32.0 // indirect
-	golang.org/x/text v0.25.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250324211829-b45e905df463 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250324211829-b45e905df463 // indirect
-	google.golang.org/grpc v1.73.0 // indirect
-	google.golang.org/protobuf v1.36.6 // indirect
+	golang.org/x/net v0.42.0 // indirect
+	golang.org/x/oauth2 v0.32.0 // indirect
+	golang.org/x/sync v0.16.0 // indirect
+	golang.org/x/sys v0.34.0 // indirect
+	golang.org/x/term v0.33.0 // indirect
+	golang.org/x/text v0.27.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250804133106-a7a43d27e69b // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
+	google.golang.org/grpc v1.76.0 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

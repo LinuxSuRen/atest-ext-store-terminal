@@ -16,20 +16,23 @@ limitations under the License.
 package cmd
 
 import (
+	"fmt"
 	ext "github.com/linuxsuren/api-testing/pkg/extension"
 	"github.com/linuxsuren/atest-ext-store-terminal/pkg"
 	"github.com/spf13/cobra"
+	"net"
 )
 
 func NewRootCmd() (cmd *cobra.Command) {
 	opt := &option{
-		Extension: ext.NewExtension("orm", "store", 4076),
+		Extension: ext.NewExtension("terminal", "store", 4076),
 	}
 	cmd = &cobra.Command{
 		Use:  "atest-store-terminal",
 		RunE: opt.runE,
 	}
 	opt.AddFlags(cmd.Flags())
+	cmd.Flags().IntVarP(&opt.serverPort, "server-port", "", 0, "the port of the server")
 	return
 }
 
@@ -40,14 +43,12 @@ func (o *option) runE(c *cobra.Command, args []string) (err error) {
 		}
 	}()
 
-	go func() {
-		pkg.StartExecServer(":8080")
-	}()
-
-	err = ext.CreateRunner(o.Extension, c, pkg.NewRemoteServer())
+	lis := pkg.StartExecServer(fmt.Sprintf(":%d", o.serverPort))
+	err = ext.CreateRunner(o.Extension, c, pkg.NewRemoteServer(lis.Addr().(*net.TCPAddr).Port))
 	return
 }
 
 type option struct {
 	*ext.Extension
+	serverPort int
 }

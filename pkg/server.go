@@ -17,6 +17,7 @@ package pkg
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/linuxsuren/api-testing/pkg/version"
 	"github.com/linuxsuren/atest-ext-store-terminal/ui"
@@ -25,8 +26,9 @@ import (
 	"github.com/linuxsuren/api-testing/pkg/testing/remote"
 )
 
-type databaseExtension struct {
+type terminalExtension struct {
 	remote.UnimplementedLoaderServer
+	httpPort int
 }
 
 type RemoteServer interface {
@@ -40,12 +42,14 @@ type UIExtension interface {
 	GetMenus(ctx context.Context, empty *server.Empty) (*server.MenuList, error)
 }
 
-func NewRemoteServer() (server RemoteServer) {
-	server = &databaseExtension{}
+func NewRemoteServer(httpPort int) (server RemoteServer) {
+	server = &terminalExtension{
+		httpPort: httpPort,
+	}
 	return
 }
 
-func (s *databaseExtension) GetMenus(ctx context.Context, empty *server.Empty) (reply *server.MenuList, err error) {
+func (s *terminalExtension) GetMenus(ctx context.Context, empty *server.Empty) (reply *server.MenuList, err error) {
 	reply = &server.MenuList{
 		Data: []*server.Menu{
 			{
@@ -58,7 +62,7 @@ func (s *databaseExtension) GetMenus(ctx context.Context, empty *server.Empty) (
 	return
 }
 
-func (s *databaseExtension) GetPageOfJS(ctx context.Context, in *server.SimpleName) (reply *server.CommonResult, err error) {
+func (s *terminalExtension) GetPageOfJS(ctx context.Context, in *server.SimpleName) (reply *server.CommonResult, err error) {
 	reply = &server.CommonResult{
 		Success: true,
 		Message: ui.GetJS(),
@@ -66,7 +70,7 @@ func (s *databaseExtension) GetPageOfJS(ctx context.Context, in *server.SimpleNa
 	return
 }
 
-func (s *databaseExtension) GetPageOfCSS(ctx context.Context, in *server.SimpleName) (reply *server.CommonResult, err error) {
+func (s *terminalExtension) GetPageOfCSS(ctx context.Context, in *server.SimpleName) (reply *server.CommonResult, err error) {
 	reply = &server.CommonResult{
 		Success: true,
 		Message: ui.GetCSS(),
@@ -74,7 +78,15 @@ func (s *databaseExtension) GetPageOfCSS(ctx context.Context, in *server.SimpleN
 	return
 }
 
-func (s *databaseExtension) Verify(ctx context.Context, in *server.Empty) (reply *server.ExtensionStatus, err error) {
+func (s *terminalExtension) GetPageOfServer(ctx context.Context, in *server.SimpleName) (reply *server.CommonResult, err error) {
+	reply = &server.CommonResult{
+		Success: true,
+		Message: fmt.Sprintf("http://localhost:%d/extensionProxy/terminal", s.httpPort),
+	}
+	return
+}
+
+func (s *terminalExtension) Verify(ctx context.Context, in *server.Empty) (reply *server.ExtensionStatus, err error) {
 	reply = &server.ExtensionStatus{
 		Ready:   true,
 		Version: version.GetVersion(),

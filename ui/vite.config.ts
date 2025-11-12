@@ -43,29 +43,10 @@ export default defineConfig(({mode}) => {
   },
   server: {
     proxy: {
-      '/server.Runner': {
+      '/api/exec/stream': {
         target: env.VITE_API_URL,
         changeOrigin: true,
-      },
-      '/server.Mock': {
-        target: env.VITE_API_URL,
-        changeOrigin: true,
-      },
-      '/mock/server': {
-        target: env.VITE_API_URL,
-        changeOrigin: true,
-      },
-      '/browser': {
-        target: env.VITE_API_URL,
-        changeOrigin: true,
-      },
-      '/v3': {
-        target: env.VITE_API_URL,
-        changeOrigin: true,
-      },
-      '/api': {
-        target: env.VITE_API_URL,
-        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/exec\/stream/, ''),
       },
     },
   },

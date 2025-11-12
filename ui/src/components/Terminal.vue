@@ -167,7 +167,7 @@ const executeCommand = async (terminalId: string, cmd: string) => {
 
   try {
     // Using fetch-based approach with streaming
-    const response = await fetch('/api/exec/stream', {
+    const response = await fetch('/extensionProxy/terminal', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
