@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -82,7 +83,7 @@ func StartExecServer(addr string) net.Listener {
 		defer cancel()
 
 		// Use shell to run the command so complex commands work.
-		cmd := exec.CommandContext(ctx, "sh", "-c", req.Cmd)
+		cmd := createCommand(ctx, req.Cmd)
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
@@ -149,7 +150,7 @@ func StartExecServer(addr string) net.Listener {
 
 		// Use shell to run the command so complex commands work.
 		// For interactive commands like SSH, we need to allocate a pseudo-TTY
-		cmd := exec.CommandContext(ctx, "sh", "-c", req.Cmd)
+		cmd := createCommand(ctx, req.Cmd)
 
 		// Check if this is an interactive command that needs a TTY
 		if isInteractiveCommand(req.Cmd) {
@@ -361,4 +362,12 @@ func isInteractiveCommand(cmd string) bool {
 		}
 	}
 	return false
+}
+
+// createCommand creates an exec.Command based on the operating system
+func createCommand(ctx context.Context, cmdString string) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		return exec.CommandContext(ctx, "cmd.exe", "/c", cmdString)
+	}
+	return exec.CommandContext(ctx, "sh", "-c", cmdString)
 }
