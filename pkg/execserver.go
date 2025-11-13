@@ -17,9 +17,14 @@ import (
 	"time"
 )
 
+type Terminal struct {
+	TerminalId   string `json:"terminalId"`
+	TerminalName string `json:"terminalName"`
+}
+
 type execRequest struct {
-	Cmd        string `json:"cmd"`
-	TerminalId string `json:"terminalId"`
+	Cmd string `json:"cmd"`
+	Terminal
 }
 
 type inputRequest struct {
@@ -50,6 +55,14 @@ type ProcessInfo struct {
 // Global process manager
 var processManager = &ProcessManager{
 	processes: make(map[int]*ProcessInfo),
+}
+
+type TerminalCache struct {
+	Writer         io.WriteCloser
+	Context        context.Context
+	ResponseWriter http.ResponseWriter
+	DoneChannel    chan bool
+	Terminal
 }
 
 // StartExecServer starts a small HTTP server to execute shell commands.
@@ -107,16 +120,10 @@ func StartExecServer(addr string) net.Listener {
 		_ = json.NewEncoder(w).Encode(resp)
 	})
 
-	cmdWriterCache := map[string]io.Writer{}
+	cmdWriterCache := map[string]TerminalCache{}
 
 	// Add streaming endpoint
 	mux.HandleFunc("/extensionProxy/terminal", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("X-Accel-Buffering", "no") // Disable buffering for nginx
-
 		if r.Method == http.MethodOptions {
 			w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -124,24 +131,62 @@ func StartExecServer(addr string) net.Listener {
 			return
 		}
 
-		if r.Method != http.MethodPost {
+		var req execRequest
+
+		if r.Method == http.MethodDelete {
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			fmt.Println("terminating terminal", req.TerminalId)
+			if c, ok := cmdWriterCache[req.TerminalId]; ok {
+				c.Writer.Close()
+				c.Context.Done()
+				delete(cmdWriterCache, req.TerminalId)
+			}
+			return
+		} else if r.Method == http.MethodGet {
+			// get the keys of the map cmdWriterCache
+			keys := make([]Terminal, 0, len(cmdWriterCache))
+			for _, c := range cmdWriterCache {
+				keys = append(keys, Terminal{
+					TerminalId:   c.TerminalId,
+					TerminalName: c.TerminalName,
+				})
+			}
+			w.Header().Set("Content-Type", "application/json")
+			err := json.NewEncoder(w).Encode(keys)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		} else if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
-		var req execRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("X-Accel-Buffering", "no") // Disable buffering for nginx
 		if c, ok := cmdWriterCache[req.TerminalId]; ok {
 			fmt.Println("sending command to existing terminal", req.TerminalId, "cmd:", req.Cmd)
-			_, err := c.Write([]byte(req.Cmd + "\n"))
+			c.ResponseWriter = w
+			_, err := c.Writer.Write([]byte(req.Cmd + "\n"))
 			if err == nil {
 				return
+			} else {
+				fmt.Println("failed to write to terminal", req.TerminalId, "cmd:", req.Cmd, "error:", err)
+				go c.Context.Done()
+				c.DoneChannel <- true
+				delete(cmdWriterCache, req.TerminalId)
 			}
-			cmdWriterCache[req.TerminalId] = nil
 		}
 
 		// Create context with timeout
@@ -164,7 +209,6 @@ func StartExecServer(addr string) net.Listener {
 			http.Error(w, "failed to create stdin pipe: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		cmdWriterCache[req.TerminalId] = stdinPipe
 
 		// Create pipes for stdout and stderr
 		stdoutPipe, err := cmd.StdoutPipe()
@@ -206,6 +250,16 @@ func StartExecServer(addr string) net.Listener {
 		stdoutCh := make(chan string)
 		stderrCh := make(chan string)
 		doneCh := make(chan bool)
+
+		cmdWriterCache[req.TerminalId] = TerminalCache{
+			Writer:      stdinPipe,
+			Context:     ctx,
+			DoneChannel: doneCh,
+			Terminal: Terminal{
+				TerminalId:   req.TerminalId,
+				TerminalName: req.TerminalName,
+			},
+		}
 
 		// Variables to store exit code and error message
 		var exitCode int
@@ -250,11 +304,15 @@ func StartExecServer(addr string) net.Listener {
 		}()
 
 		// Main loop to handle output and input
-		for {
+		loop := true
+		for loop {
 			select {
 			case stdoutLine, ok := <-stdoutCh:
 				if ok {
-					fmt.Fprintf(w, "data: {\"type\": \"stdout\", \"data\": %q}\n\n", stdoutLine)
+					_, e := fmt.Fprintf(w, "data: {\"type\": \"stdout\", \"data\": %q}\n\n", stdoutLine)
+					if e != nil {
+						fmt.Println("failed to write to terminal", req.TerminalId, "stdout:", e)
+					}
 					w.(http.Flusher).Flush()
 				}
 			case stderrLine, ok := <-stderrCh:
@@ -262,12 +320,14 @@ func StartExecServer(addr string) net.Listener {
 					fmt.Fprintf(w, "data: {\"type\": \"stderr\", \"data\": %q}\n\n", stderrLine)
 					w.(http.Flusher).Flush()
 				}
+				break
 			case <-doneCh:
 				// Command has finished executing, send final end event
 				fmt.Fprintf(w, "data: {\"type\": \"end\", \"exitCode\": %d, \"error\": %q}\n\n", exitCode, errorMsg)
 				w.(http.Flusher).Flush()
 				// Close stdin pipe
 				stdinPipe.Close()
+				loop = false
 			case <-ctx.Done():
 				// Context cancelled, kill the process
 				if cmd.Process != nil {
@@ -281,8 +341,11 @@ func StartExecServer(addr string) net.Listener {
 				processManager.mutex.Lock()
 				delete(processManager.processes, cmd.Process.Pid)
 				processManager.mutex.Unlock()
+				loop = false
 			}
 		}
+		delete(cmdWriterCache, req.TerminalId)
+		fmt.Println("command finished", req.TerminalId, "exitCode:", exitCode, "error:", errorMsg)
 	})
 
 	// Add endpoint for sending input to running process

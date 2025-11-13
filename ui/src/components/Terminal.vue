@@ -5,10 +5,10 @@ import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css'
-import type { TabsPaneContext } from 'element-plus'
+import type { TabsPaneContext, TabPaneName } from 'element-plus'
 
 interface TerminalInstance {
-  id: string
+  id: TabPaneName
   name: string
   terminal: Terminal
   isExecuting: boolean
@@ -17,14 +17,18 @@ interface TerminalInstance {
 }
 
 const terminals = ref<TerminalInstance[]>([])
-const activeTerminal = ref('')
+const activeTerminal = ref<TabPaneName>('')
 const lastInput = ref('')
 let terminalCounter = 1
 
-const addTerminal = () => {
-  const id = `terminal-${terminalCounter++}`
-  const name = `Terminal ${terminalCounter - 1}`
-  
+const operateTerminal = (terminal: TabPaneName, action: 'remove' | 'add', terminalName?: string | null) => {
+  if (action === 'remove') {
+    return
+  }
+
+  const id = terminal || `terminal-${terminalCounter++}`
+  const name = terminalName || `Terminal ${terminalCounter - 1}`
+
   const newTerminal = new Terminal({
     cursorBlink: true,
     scrollback: 1000,
@@ -71,17 +75,17 @@ const addTerminal = () => {
     } else {
       newTerminal.write(data)
       commandBuffer += data
-      
+
       // If a command is executing, send input character to the running process
       if (terminalInstance.isExecuting && terminalInstance.currentPid) {
         await sendInputToProcess(terminalInstance.currentPid, data)
       }
     }
-    
+
     // Update the command buffer in the terminal instance
     terminalInstance.commandBuffer = commandBuffer
   })
-  
+
   terminals.value.push({
     id,
     name,
@@ -90,9 +94,9 @@ const addTerminal = () => {
     currentPid: null,
     commandBuffer: ''
   })
-  
+
   activeTerminal.value = id
-  
+
   // Wait for the next tick to ensure the DOM is updated
   nextTick(() => {
     const container = document.getElementById(id)
@@ -161,7 +165,7 @@ const sendInputToProcess = async (pid: number, input: string) => {
   }
 }
 
-const executeCommand = async (terminalId: string, cmd: string) => {
+const executeCommand = async (terminalId: TabPaneName, cmd: string) => {
   if (cmd === '') return
 
   const terminalInstance = terminals.value.find(t => t.id === terminalId)
@@ -181,6 +185,7 @@ const executeCommand = async (terminalId: string, cmd: string) => {
       body: JSON.stringify({
         cmd: cmd,
         terminalId: terminalId,
+        terminalName: terminalInstance.name
       })
     });
 
@@ -197,7 +202,7 @@ const executeCommand = async (terminalId: string, cmd: string) => {
 
     let buffer = '';
     let processFinished = false;
-    
+
     while (!processFinished) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -255,7 +260,7 @@ const executeCommand = async (terminalId: string, cmd: string) => {
         console.error('Error parsing SSE data:', e);
       }
     }
-    
+
     // Ensure we always show the prompt when process finishes
     if (processFinished) {
       reader.cancel();
@@ -269,14 +274,24 @@ const executeCommand = async (terminalId: string, cmd: string) => {
 }
 
 const removeTerminal = (id: string) => {
+  fetch('/extensionProxy/terminal', {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      terminalId: id,
+    })
+  })
+
   const index = terminals.value.findIndex((term: TerminalInstance) => term.id === id)
   if (index !== -1) {
     // Dispose of the terminal
     terminals.value[index].terminal.dispose()
-    
+
     // Remove from the list
     terminals.value.splice(index, 1)
-    
+
     // If we removed the active terminal, select another one
     if (activeTerminal.value === id) {
       if (terminals.value.length > 0) {
@@ -292,9 +307,31 @@ const handleTabClick = (tab: TabsPaneContext) => {
   activeTerminal.value = tab.paneName as string
 }
 
-onMounted(() => {
-  // Add the first terminal
-  addTerminal()
+interface TerminalRef {
+  terminalId: string
+  terminalName: string
+}
+
+onMounted(async () => {
+  let existingTerminals = await fetch('/extensionProxy/terminal', {
+    method: 'GET'
+  }).then(response => {
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  })
+
+  if (!existingTerminals || existingTerminals.length === 0) existingTerminals =  [{
+    terminalId: 'default',
+    terminalName: 'Default'
+  }]
+
+  existingTerminals.forEach((key: TerminalRef) => {
+    const id = key.terminalId
+    const name = key.terminalName
+    operateTerminal(id, 'add', name)
+  })
 })
 
 onUnmounted(() => {
@@ -307,12 +344,11 @@ onUnmounted(() => {
 
 <template>
   <div class="terminal-container">
-    <el-button type="primary" @click="addTerminal" size="small">New Terminal</el-button>
-    
-    <el-tabs 
-      v-model="activeTerminal" 
-      type="card" 
-      closable 
+    <el-tabs
+      v-model="activeTerminal"
+      type="card"
+      editable
+      @edit="operateTerminal"
       @tab-click="handleTabClick"
       @tab-remove="removeTerminal"
       class="terminal-tabs"
