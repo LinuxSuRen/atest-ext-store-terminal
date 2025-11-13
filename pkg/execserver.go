@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/creack/pty"
 	"io"
 	"log"
 	"net"
@@ -15,11 +16,15 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 type Terminal struct {
 	TerminalId   string `json:"terminalId"`
 	TerminalName string `json:"terminalName"`
+	WSPort       int    `json:"wsPort"`
+	Mode         string `json:"mode"`
 }
 
 type execRequest struct {
@@ -35,6 +40,15 @@ type execResponse struct {
 	Stdout   string `json:"stdout"`
 	Stderr   string `json:"stderr"`
 	ExitCode int    `json:"exitCode"`
+	Error    string `json:"error,omitempty"`
+}
+
+// WebSocket message types
+type WSMessage struct {
+	Type     string `json:"type"`
+	Data     string `json:"data,omitempty"`
+	Pid      int    `json:"pid,omitempty"`
+	ExitCode int    `json:"exitCode,omitempty"`
 	Error    string `json:"error,omitempty"`
 }
 
@@ -63,6 +77,19 @@ type TerminalCache struct {
 	ResponseWriter http.ResponseWriter
 	DoneChannel    chan bool
 	Terminal
+}
+
+// WebSocket upgrader
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true // Allow connections from any origin in this example
+	},
+}
+
+var serverPort int
+
+func SetServerPort(port int) {
+	serverPort = port
 }
 
 // StartExecServer starts a small HTTP server to execute shell commands.
@@ -120,6 +147,9 @@ func StartExecServer(addr string) net.Listener {
 		_ = json.NewEncoder(w).Encode(resp)
 	})
 
+	// WebSocket endpoint for command execution
+	mux.HandleFunc("/ws/exec", handleWebSocket)
+
 	cmdWriterCache := map[string]TerminalCache{}
 
 	// Add streaming endpoint
@@ -152,7 +182,19 @@ func StartExecServer(addr string) net.Listener {
 				keys = append(keys, Terminal{
 					TerminalId:   c.TerminalId,
 					TerminalName: c.TerminalName,
+					Mode:         runtime.GOOS,
+					WSPort:       serverPort,
 				})
+			}
+			if len(keys) == 0 {
+				keys = []Terminal{
+					{
+						TerminalId:   "default",
+						TerminalName: "Default",
+						WSPort:       serverPort,
+						Mode:         runtime.GOOS,
+					},
+				}
 			}
 			w.Header().Set("Content-Type", "application/json")
 			err := json.NewEncoder(w).Encode(keys)
@@ -414,6 +456,194 @@ func StartExecServer(addr string) net.Listener {
 		}
 	}()
 	return lis
+}
+
+// handleWebSocket handles WebSocket connections for command execution
+func handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("WebSocket upgrade failed: %v", err)
+		return
+	}
+	defer conn.Close()
+
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		switch runtime.GOOS {
+		case "windows":
+			shell = "powershell.exe"
+		default:
+			shell = "/bin/sh"
+		}
+	}
+	cmd := exec.Command(shell)
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		log.Printf("pty start shell: %s, err: %v", shell, err)
+		return
+	}
+	defer func() { _ = ptmx.Close(); cmd.Process.Kill() }()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// 2. WebSocket → pty
+	go func() {
+		defer wg.Done()
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			if _, err := ptmx.Write(msg); err != nil {
+				return
+			}
+		}
+	}()
+
+	// 3. pty → WebSocket
+	go func() {
+		defer wg.Done()
+		buf := make([]byte, 1024)
+		for {
+			n, err := ptmx.Read(buf)
+			if err != nil {
+				return
+			}
+			if err := conn.WriteMessage(websocket.TextMessage, buf[:n]); err != nil {
+				return
+			}
+		}
+	}()
+
+	// 4. 阻塞直到任一端断开
+	wg.Wait()
+}
+
+// executeCommandViaWS executes a command and streams output via WebSocket
+func executeCommandViaWS(conn *websocket.Conn, req execRequest) {
+	// Send start message
+	sendWSMessage(conn, WSMessage{
+		Type: "start",
+	})
+
+	// Create context
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Use shell to run the command so complex commands work.
+	cmd := createCommand(ctx, req.Cmd)
+
+	// Check if this is an interactive command that needs a TTY
+	if isInteractiveCommand(req.Cmd) {
+		// Set environment variables to force TTY allocation
+		cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	}
+
+	// Create pipes for stdout and stderr
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		sendWSMessage(conn, WSMessage{
+			Type:  "error",
+			Error: "Failed to create stdout pipe: " + err.Error(),
+		})
+		return
+	}
+
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		sendWSMessage(conn, WSMessage{
+			Type:  "error",
+			Error: "Failed to create stderr pipe: " + err.Error(),
+		})
+		return
+	}
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		sendWSMessage(conn, WSMessage{
+			Type:  "error",
+			Error: "Failed to start command: " + err.Error(),
+		})
+		return
+	}
+
+	// Send PID
+	sendWSMessage(conn, WSMessage{
+		Type: "pid",
+		Pid:  cmd.Process.Pid,
+	})
+
+	// Create scanners for stdout and stderr
+	stdoutScanner := bufio.NewScanner(stdoutPipe)
+	stderrScanner := bufio.NewScanner(stderrPipe)
+
+	// Channels for output
+	stdoutCh := make(chan string)
+	stderrCh := make(chan string)
+	doneCh := make(chan int) // Channel to signal completion with exit code
+
+	// Goroutine for stdout
+	go func() {
+		for stdoutScanner.Scan() {
+			stdoutCh <- stdoutScanner.Text()
+		}
+		close(stdoutCh)
+	}()
+
+	// Goroutine for stderr
+	go func() {
+		for stderrScanner.Scan() {
+			stderrCh <- stderrScanner.Text()
+		}
+		close(stderrCh)
+	}()
+
+	// Goroutine to wait for command completion
+	go func() {
+		err := cmd.Wait()
+		exitCode := 0
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+			} else {
+				exitCode = -1
+			}
+		}
+		doneCh <- exitCode
+	}()
+
+	// Main loop to handle output
+	for {
+		select {
+		case stdoutLine, ok := <-stdoutCh:
+			if ok {
+				sendWSMessage(conn, WSMessage{
+					Type: "stdout",
+					Data: stdoutLine,
+				})
+			}
+		case stderrLine, ok := <-stderrCh:
+			if ok {
+				sendWSMessage(conn, WSMessage{
+					Type: "stderr",
+					Data: stderrLine,
+				})
+			}
+		case exitCode := <-doneCh:
+			// Command has finished executing
+			sendWSMessage(conn, WSMessage{
+				Type:     "end",
+				ExitCode: exitCode,
+			})
+			return
+		}
+	}
+}
+
+// sendWSMessage sends a message via WebSocket
+func sendWSMessage(conn *websocket.Conn, msg WSMessage) error {
+	return conn.WriteJSON(msg)
 }
 
 // isInteractiveCommand checks if a command is likely to be interactive

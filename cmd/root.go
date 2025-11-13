@@ -44,6 +44,7 @@ func (o *option) runE(c *cobra.Command, args []string) (err error) {
 	}()
 
 	lis := pkg.StartExecServer(fmt.Sprintf(":%d", o.serverPort))
+	pkg.SetServerPort(lis.Addr().(*net.TCPAddr).Port)
 	err = ext.CreateRunner(o.Extension, c, pkg.NewRemoteServer(lis.Addr().(*net.TCPAddr).Port))
 	return
 }

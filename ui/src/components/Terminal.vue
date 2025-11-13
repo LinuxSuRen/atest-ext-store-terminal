@@ -4,8 +4,9 @@ import { Terminal } from '@xterm/xterm'
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
+import { AttachAddon } from '@xterm/addon-attach';
 import '@xterm/xterm/css/xterm.css'
-import type { TabsPaneContext, TabPaneName } from 'element-plus'
+import {type TabsPaneContext, type TabPaneName, ElMessage} from 'element-plus'
 
 interface TerminalInstance {
   id: TabPaneName
@@ -19,6 +20,8 @@ interface TerminalInstance {
 const terminals = ref<TerminalInstance[]>([])
 const activeTerminal = ref<TabPaneName>('')
 const lastInput = ref('')
+const wsPort = ref<number>(0)
+const mode = ref('')
 let terminalCounter = 1
 
 const operateTerminal = (terminal: TabPaneName, action: 'remove' | 'add', terminalName?: string | null) => {
@@ -41,50 +44,66 @@ const operateTerminal = (terminal: TabPaneName, action: 'remove' | 'add', termin
   newTerminal.loadAddon(new WebLinksAddon());
   newTerminal.loadAddon(new SearchAddon());
 
-  let commandBuffer = ''
-  newTerminal.onData(async (data) => {
-    const terminalInstance = terminals.value.find(t => t.id === id)
-    if (!terminalInstance) return
+  if (mode.value === 'windows') {
+    let commandBuffer = ''
+    newTerminal.onData(async (data) => {
+      const terminalInstance = terminals.value.find(t => t.id === id)
+      if (!terminalInstance) return
 
-    lastInput.value = data.charCodeAt(0) + ''
-    if (data.charCodeAt(0) === 13) { // Enter key
-      newTerminal.write('\r\n')
-      if (terminalInstance.isExecuting && terminalInstance.currentPid) {
-        // If a command is executing, send input to the running process
-        // await sendInputToProcess(terminalInstance.currentPid, commandBuffer + '\n')
-        executeCommand(id, commandBuffer)
-      } else if (commandBuffer.trim()) {
-        // Otherwise, execute a new command
-        executeCommand(id, commandBuffer)
-      } else {
+      lastInput.value = data.charCodeAt(0) + ''
+      if (data.charCodeAt(0) === 13) { // Enter key
+        newTerminal.write('\r\n')
+        if (terminalInstance.isExecuting && terminalInstance.currentPid) {
+          // If a command is executing, send input to the running process
+          // await sendInputToProcess(terminalInstance.currentPid, commandBuffer + '\n')
+          executeCommand(id, commandBuffer)
+        } else if (commandBuffer.trim()) {
+          // Otherwise, execute a new command
+          executeCommand(id, commandBuffer)
+        } else {
+          newTerminal.write('$ ')
+        }
+        commandBuffer = ''
+      } else if (data === '\x08' || data === '\x7F') { // delete key
+        if (commandBuffer.length > 0) {
+          commandBuffer = commandBuffer.slice(0, -1)
+          newTerminal.write('\b \b')
+        }
+      } else if (data === '\x03') {
+        commandBuffer = ''
+        newTerminal.write('\r\n')
         newTerminal.write('$ ')
-      }
-      commandBuffer = ''
-    } else if (data === '\x08' || data === '\x7F') { // delete key
-      if (commandBuffer.length > 0) {
-        commandBuffer = commandBuffer.slice(0, -1)
-        newTerminal.write('\b \b')
-      }
-    } else if (data === '\x03') {
-      commandBuffer = ''
-      newTerminal.write('\r\n')
-      newTerminal.write('$ ')
-    } else if (data.charCodeAt(0) === 12) {
-      newTerminal.write('\x1b[2J\x1b[H');
-      newTerminal.write('$ ')
-    } else {
-      newTerminal.write(data)
-      commandBuffer += data
+      } else if (data.charCodeAt(0) === 12) {
+        newTerminal.write('\x1b[2J\x1b[H');
+        newTerminal.write('$ ')
+      } else {
+        newTerminal.write(data)
+        commandBuffer += data
 
-      // If a command is executing, send input character to the running process
-      if (terminalInstance.isExecuting && terminalInstance.currentPid) {
-        await sendInputToProcess(terminalInstance.currentPid, data)
+        // If a command is executing, send input character to the running process
+        if (terminalInstance.isExecuting && terminalInstance.currentPid) {
+          await sendInputToProcess(terminalInstance.currentPid, data)
+        }
       }
-    }
 
-    // Update the command buffer in the terminal instance
-    terminalInstance.commandBuffer = commandBuffer
-  })
+      // Update the command buffer in the terminal instance
+      terminalInstance.commandBuffer = commandBuffer
+    })
+  } else {
+    const socket = new WebSocket(`ws://${window.location.hostname}:${wsPort.value}/ws/exec`);
+    socket.binaryType = 'arraybuffer';
+    socket.addEventListener('open', () => {
+      console.log('WebSocket connection opened');
+      newTerminal.loadAddon(new AttachAddon(socket));
+    });
+    socket.onerror = () => {
+      ElMessage({
+        message: `Failed to connect to WebSocket server!`,
+        type: 'error',
+        plain: true,
+      })
+    };
+  }
 
   terminals.value.push({
     id,
@@ -310,6 +329,8 @@ const handleTabClick = (tab: TabsPaneContext) => {
 interface TerminalRef {
   terminalId: string
   terminalName: string
+  wsPort: number
+  mode: string
 }
 
 onMounted(async () => {
@@ -330,6 +351,8 @@ onMounted(async () => {
   existingTerminals.forEach((key: TerminalRef) => {
     const id = key.terminalId
     const name = key.terminalName
+    wsPort.value = key.wsPort
+    mode.value = key.mode
     operateTerminal(id, 'add', name)
   })
 })
