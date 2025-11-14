@@ -90,7 +90,7 @@ const operateTerminal = (terminal: TabPaneName, action: 'remove' | 'add', termin
       terminalInstance.commandBuffer = commandBuffer
     })
   } else {
-    const socket = new WebSocket(`ws://${window.location.hostname}:${wsPort.value}/ws/exec`);
+    const socket = new WebSocket(`ws://127.0.0.1:${wsPort.value}/ws/exec`);
     socket.binaryType = 'arraybuffer';
     socket.addEventListener('open', () => {
       console.log('WebSocket connection opened');
