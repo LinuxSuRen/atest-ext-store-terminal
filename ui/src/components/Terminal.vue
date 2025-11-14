@@ -44,6 +44,7 @@ const operateTerminal = (terminal: TabPaneName, action: 'remove' | 'add', termin
   newTerminal.loadAddon(new WebLinksAddon());
   newTerminal.loadAddon(new SearchAddon());
 
+  let keyEventHandler = emptyKeyEventHandler
   if (mode.value === 'windows') {
     let commandBuffer = ''
     newTerminal.onData(async (data) => {
@@ -89,8 +90,9 @@ const operateTerminal = (terminal: TabPaneName, action: 'remove' | 'add', termin
       // Update the command buffer in the terminal instance
       terminalInstance.commandBuffer = commandBuffer
     })
+    keyEventHandler = ignoreArrowKeys
   } else {
-    const socket = new WebSocket(`ws://${window.location.hostname}:${window.location.port}/extensionProxy/terminal/ws`);
+    const socket = new WebSocket(`${window.wsUrl}/extensionProxy/terminal/ws`);
     socket.binaryType = 'arraybuffer';
     socket.addEventListener('open', () => {
       console.log('WebSocket connection opened');
@@ -125,15 +127,21 @@ const operateTerminal = (terminal: TabPaneName, action: 'remove' | 'add', termin
       newTerminal.writeln('')
       newTerminal.write('$ ')
 
-      newTerminal.attachCustomKeyEventHandler((e) => {
-        if (e.type === 'keydown' && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-          e.preventDefault();
-          return false;
-        }
-        return true;
-      });
+      newTerminal.attachCustomKeyEventHandler(keyEventHandler);
     }
   })
+}
+
+const emptyKeyEventHandler = (_: KeyboardEvent) => {
+  return true;
+}
+
+const ignoreArrowKeys = (e: KeyboardEvent) => {
+  if (e.type === 'keydown' && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    e.preventDefault();
+    return false;
+  }
+  return true;
 }
 
 function calcCols(term: Terminal, ele: HTMLElement) {

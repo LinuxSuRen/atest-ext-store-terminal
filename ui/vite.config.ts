@@ -19,6 +19,7 @@ export default defineConfig(({mode}) => {
     define: {
       'process.env.NODE_ENV': JSON.stringify('production'),
       'process.env': JSON.stringify({}),
+      'wsUrl': JSON.stringify(env.VITE_WS_URL) || `${window.location.hostname}:${window.location.port}`,
       'global': 'window'
     },
     resolve: {
