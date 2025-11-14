@@ -90,7 +90,7 @@ const operateTerminal = (terminal: TabPaneName, action: 'remove' | 'add', termin
       terminalInstance.commandBuffer = commandBuffer
     })
   } else {
-    const socket = new WebSocket(`ws://127.0.0.1:${wsPort.value}/ws/exec`);
+    const socket = new WebSocket(`ws://${window.location.hostname}:${window.location.port}/extensionProxy/terminal/ws`);
     socket.binaryType = 'arraybuffer';
     socket.addEventListener('open', () => {
       console.log('WebSocket connection opened');
@@ -196,7 +196,7 @@ const executeCommand = async (terminalId: TabPaneName, cmd: string) => {
 
   try {
     // Using fetch-based approach with streaming
-    const response = await fetch('/extensionProxy/terminal', {
+    const response = await fetch('/extensionProxy/terminal/exec', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -293,7 +293,7 @@ const executeCommand = async (terminalId: TabPaneName, cmd: string) => {
 }
 
 const removeTerminal = (id: string) => {
-  fetch('/extensionProxy/terminal', {
+  fetch('/extensionProxy/terminal/exec', {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
@@ -334,7 +334,7 @@ interface TerminalRef {
 }
 
 onMounted(async () => {
-  let existingTerminals = await fetch('/extensionProxy/terminal', {
+  let existingTerminals = await fetch('/extensionProxy/terminal/exec', {
     method: 'GET'
   }).then(response => {
     if (!response.ok) {

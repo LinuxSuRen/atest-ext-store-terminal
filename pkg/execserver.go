@@ -148,12 +148,12 @@ func StartExecServer(addr string) net.Listener {
 	})
 
 	// WebSocket endpoint for command execution
-	mux.HandleFunc("/ws/exec", handleWebSocket)
+	mux.HandleFunc("/extensionProxy/terminal/ws", handleWebSocket)
 
 	cmdWriterCache := map[string]TerminalCache{}
 
 	// Add streaming endpoint
-	mux.HandleFunc("/extensionProxy/terminal", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/extensionProxy/terminal/exec", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions {
 			w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
