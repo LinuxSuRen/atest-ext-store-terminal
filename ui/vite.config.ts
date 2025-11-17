@@ -19,7 +19,6 @@ export default defineConfig(({mode}) => {
     define: {
       'process.env.NODE_ENV': JSON.stringify('production'),
       'process.env': JSON.stringify({}),
-      'wsUrl': JSON.stringify(env.VITE_WS_URL) || `${window.location.hostname}:${window.location.port}`,
       'global': 'window'
     },
     resolve: {
@@ -44,8 +43,13 @@ export default defineConfig(({mode}) => {
   },
   server: {
     proxy: {
-      '/extensionProxy/terminal': {
+      '/extensionProxy/terminal/exec': {
         target: env.VITE_API_URL,
+        changeOrigin: true
+      },
+      '/extensionProxy/terminal/ws': {
+        target: env.VITE_WS_URL,
+        ws: true,
         changeOrigin: true
       },
     },

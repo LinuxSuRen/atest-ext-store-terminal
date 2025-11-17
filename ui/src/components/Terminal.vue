@@ -92,7 +92,7 @@ const operateTerminal = (terminal: TabPaneName, action: 'remove' | 'add', termin
     })
     keyEventHandler = ignoreArrowKeys
   } else {
-    const socket = new WebSocket(`${window.wsUrl}/extensionProxy/terminal/ws`);
+    const socket = new WebSocket(`/extensionProxy/terminal/ws`);
     socket.binaryType = 'arraybuffer';
     socket.addEventListener('open', () => {
       console.log('WebSocket connection opened');
