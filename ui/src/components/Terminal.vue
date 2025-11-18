@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import {ref, onMounted, onUnmounted, nextTick, watch} from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -18,6 +18,7 @@ interface TerminalInstance {
 }
 
 const terminals = ref<TerminalInstance[]>([])
+const terminalSearchMap = new Map<TabPaneName, SearchAddon>()
 const activeTerminal = ref<TabPaneName>('')
 const lastInput = ref('')
 const wsPort = ref<number>(0)
@@ -35,14 +36,14 @@ const operateTerminal = (terminal: TabPaneName, action: 'remove' | 'add', termin
   const newTerminal = new Terminal({
     cursorBlink: true,
     scrollback: 1000,
-    theme: {
-      background: '#000000',
-      foreground: '#ffffff'
-    }
+    allowProposedApi: true
   })
+  const searchAddon = new SearchAddon()
   newTerminal.loadAddon(new ClipboardAddon())
   newTerminal.loadAddon(new WebLinksAddon());
-  newTerminal.loadAddon(new SearchAddon());
+  newTerminal.loadAddon(searchAddon);
+
+  terminalSearchMap.set(id, searchAddon)
 
   let keyEventHandler = emptyKeyEventHandler
   if (mode.value === 'windows') {
@@ -327,6 +328,7 @@ const removeTerminal = (id: string) => {
         activeTerminal.value = ''
       }
     }
+    terminalSearchMap.delete(id)
   }
 }
 
@@ -364,6 +366,18 @@ onMounted(async () => {
     operateTerminal(id, 'add', name)
   })
 })
+const terminalSearchKeyword = ref('')
+const terminalSearchHandler = () => {
+  const keyword = terminalSearchKeyword.value
+  const searchAddon = terminalSearchMap.get(activeTerminal.value)
+  if (searchAddon) {
+    searchAddon.findNext(keyword, {
+      regex: true,
+      incremental: true
+    })
+  }
+}
+watch(terminalSearchKeyword, () => terminalSearchHandler)
 
 onUnmounted(() => {
   // Dispose of all terminals
@@ -391,6 +405,10 @@ onUnmounted(() => {
         :name="term.id"
       >
         <div class="terminal-wrapper">
+          <div class="terminal-search">
+            <el-input size="small" placeholder="Type to search" v-model="terminalSearchKeyword" />
+            <el-button size="small" type="primary" @click="terminalSearchHandler">Search</el-button>
+          </div>
           <div :id="term.id" class="xterm-container"></div>
         </div>
       </el-tab-pane>
@@ -424,6 +442,11 @@ onUnmounted(() => {
   width: 100%;
   height: calc(100vh - 150px);
   position: relative;
+}
+
+.terminal-search {
+  display: flex;
+  gap: 8px;
 }
 
 .xterm-container {
