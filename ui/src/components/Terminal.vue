@@ -6,6 +6,10 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
 import { AttachAddon } from '@xterm/addon-attach';
 import '@xterm/xterm/css/xterm.css'
+import themeBlazer from '../assets/themes/blazer.json' 
+import themeBlueMatrix from '../assets/themes/blue-matrix.json' 
+import themeBlueDolphin from '../assets/themes/blue-dolphin.json'
+import themeHorizon from '../assets/themes/horizon.json'
 import {type TabsPaneContext, type TabPaneName, ElMessage} from 'element-plus'
 
 interface TerminalInstance {
@@ -36,7 +40,8 @@ const operateTerminal = (terminal: TabPaneName, action: 'remove' | 'add', termin
   const newTerminal = new Terminal({
     cursorBlink: true,
     scrollback: 1000,
-    allowProposedApi: true
+    allowProposedApi: true,
+    theme: themeBlazer
   })
   const searchAddon = new SearchAddon()
   newTerminal.loadAddon(new ClipboardAddon())
@@ -408,6 +413,12 @@ onUnmounted(() => {
           <div class="terminal-search">
             <el-input size="small" placeholder="Type to search" v-model="terminalSearchKeyword" />
             <el-button size="small" type="primary" @click="terminalSearchHandler">Search</el-button>
+            <el-select v-model="term.terminal.options.theme" placeholder="Select Theme" size="small" style="width: 120px;">
+              <el-option label="Blazer" :value="themeBlazer"></el-option>
+              <el-option label="Blue Matrix" :value="themeBlueMatrix"></el-option>
+              <el-option label="BlueDolphin" :value="themeBlueDolphin"></el-option>
+              <el-option label="Horizon" :value="themeHorizon"></el-option>
+            </el-select>
           </div>
           <div :id="term.id" class="xterm-container"></div>
         </div>
