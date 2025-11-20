@@ -1,5 +1,6 @@
-This is the base extension of [atest](https://github.com/LinuxSuRen/api-testing) database client.
+This is the base extension of [atest](https://github.com/LinuxSuRen/api-testing) terminal client.
 
 ## Screenshots
 
-<img width="2560" height="997" alt="image" src="https://github.com/user-attachments/assets/59ec92f9-3d53-466f-9f3c-e7da9a9533ea" />
+<img width="1336" height="696" alt="image" src="https://github.com/user-attachments/assets/bc4cd4ca-6f84-4d4e-849e-c4ac636001fb" />
+
